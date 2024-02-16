@@ -34,6 +34,9 @@ on:
         required: false
         default: ''
         type: string
+      patch_note:
+        required: false
+        type: string
     secrets:
       GPG_SIGNING_KEY:
         required: false
@@ -404,6 +407,28 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download patches
+        if: ${{ inputs.patch_note != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: patchsets
+          path: patchsets
+      - name: Apply patches
+        if: ${{ inputs.patch_note != '' }}
+        continue-on-error: true
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+          Get-ChildItem patchsets -Filter "*.patch" | Foreach-Object {
+            $filepath=$_.FullName
+            echo $filepath
+            git apply --stat --apply $filepath
+            <#if ($? -ne 0) {
+              git am --abort
+            }#>
+          }
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
