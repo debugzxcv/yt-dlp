@@ -30,6 +30,9 @@ on:
       windows:
         default: true
         type: boolean
+      patch_note:
+        required: false
+        type: string
     secrets:
       GPG_SIGNING_KEY:
         required: false
@@ -441,6 +444,29 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Download patches
+        if: ${{ inputs.patch_note != '' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: patchsets
+          path: patchsets
+      - name: Apply patches
+        if: ${{ inputs.patch_note != '' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+          Get-ChildItem patchsets -Filter "*.patch" | Foreach-Object {
+            $filepath=$_.FullName
+            echo $filepath
+            git apply --stat --apply $filepath
+            <#if ($? -ne 0) {
+              git am --abort
+            }#>
+          }
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
