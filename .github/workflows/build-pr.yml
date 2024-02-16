@@ -1,0 +1,260 @@
+name: Build Artifacts with Patch
+run-name: "${{ inputs.prs != '' && format('{0}[{1}]', github.workflow, inputs.prs) || github.workflow }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: |
+          VERSION: yyyy.mm.dd[.rev] or rev
+          (default: auto-generated)
+        required: true
+        default: auto-generated
+        type: string
+      channel:
+        description: |
+          SOURCE of this build's updates: stable/nightly/master/<repo>
+        required: true
+        default: master
+        type: string
+      origin:
+        description: Origin
+        required: false
+        default: ' '
+        type: choice
+        options:
+        - ' '
+        - 'yt-dlp/yt-dlp'
+      unix:
+        description: yt-dlp, yt-dlp.tar.gz
+        default: false
+        type: boolean
+      linux:
+        description: yt-dlp_linux, yt-dlp_linux.zip, yt-dlp_linux_aarch64, yt-dlp_linux_aarch64.zip
+        default: false
+        type: boolean
+      linux_armv7l:
+        description: yt-dlp_linux_armv7l.zip
+        default: false
+        type: boolean
+      musllinux:
+        description: yt-dlp_musllinux, yt-dlp_musllinux.zip, yt-dlp_musllinux_aarch64, yt-dlp_musllinux_aarch64.zip
+        default: false
+        type: boolean
+      macos:
+        description: yt-dlp_macos, yt-dlp_macos.zip
+        default: false
+        type: boolean
+      windows:
+        description: yt-dlp.exe, yt-dlp_win.zip, yt-dlp_x86.exe, yt-dlp_win_x86.zip, yt-dlp_arm64.exe, yt-dlp_win_arm64.zip
+        default: true
+        type: boolean
+      prs:
+        description: |
+          Pull requests: split items by comma(',')
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.process_version.outputs.version }}
+      patch_note: ${{ steps.process_prs.outputs.patch_note }}
+    steps:
+      - name: Process version
+        id: process_version
+        run: |
+          echo "version=${{ (inputs.version == 'auto-generated') && '$(date -u +"%H%M%S")' || inputs.version }}" | tee "$GITHUB_OUTPUT"
+      - name: Process prs
+        id: process_prs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const zlib = require('zlib');
+            const b64gzip = (buf, decode)=>{
+              return decode ? zlib.gunzipSync(Buffer.from(buf, 'base64')).toString('ascii')
+                            : Buffer.from(zlib.gzipSync(buf)).toString('base64');
+            }
+            const fs = require('fs/promises');
+            const sleep = ms => new Promise(res => setTimeout(res, ms));
+            const waitingMergeability = async(o)=>{
+              let count = 0;
+              while (count<5) {
+                count = count + 1;
+                const res = await github.rest.pulls.get(o);
+                // If the 'mergeable' is 'null', waiting for GitHub to compute the mergeability
+                if (res.data.merged || res.data.mergeable != null) return res;
+                if (count<5) await sleep(300*2**count);
+              }
+            };
+            let prs = "${{ inputs.prs }}".split(',').map(e=>e.trim());
+            let i = 1;
+            let patch_note = "";
+            const patches_to_apply = {
+              'pyinstaller': [
+                // pyinstaller 6
+                'H4sIAAAAAAAAA42Oy26DMBBF9/6K2RkEJhBIX1Kk/ETXlsF2OioYyx6q0K8vTiq1S2Yxj3PvaEaj\
+                tSDEFQnUQZuvOAT0FA+T+jRyVN+rNDcKaqA5xMqv0O8wMXTa3EA/d0Yd66OtqtPw0r42Smlo6vqp\
+                65gQYtc9VhTFvpuXC4imrcsWilROsAFtLPQLjvqxgCZDU4JT05YVUZC9iiZ/Y8AALUiZFCnhfAYu\
+                5aTQSck3NUWaspwVqbdhnuDvpWohHCPg5OdAEBYnfZgHE+PD7QM6yv7hjPuVPmbHS+BiStmjTwVd\
+                JDWOd/5+5+svMoHnVSQ9L5SzH3Rv2xezAQAA',
+                'H4sIAAAAAAAAA3VQTU/CMBi+91e8t22ZHR8KCMkSNOpNPXjxRjraQpPubbMVZFn23+0oGDXQQ9P3\
+                eZ+vlHAlJVC6UQ7YoNgh12JgG4W1Y1qLKrMNFJdxopCLA/BizgvJxSTLxnw4n85Gd2MYDYezyYRQ\
+                Sq+5kjRNrzovl0DHtzdTSP09Bz9yIaFkCuNkQaA/BgVXFeQQURreESgEY10NpvLo088cBEoCGnfW\
+                MeSe8xIdsbMugL2dVFr82Z1Sj8l+zJi1Ann8i52Q9BQTIhZhvqBYG3QCXU09S6ydqZq8cZRru1J+\
+                USHTZ7N/Qtu4rUHqUWUw/4Sdk/f5yJMhtENWihuQyjus+k7+d8RBxKFPEji28iGxjB53SnOFGwjR\
+                sG/3oqq9bwfS/1/7/rF6e3h97qC1mjkPlVnJ1luFIk46+FJuC6FHDW1fs/M1CPkGrcjM8U8CAAA=',
+              ],
+              'curl-cffi': [
+                // curl-cffi new
+                'H4sIAAAAAAAAA+2a3W5dtxGF7/0UB+hFLhQpJIfDIVsIyIMUCPgzjAXYsivJRdyn77flIAnac2rf\
+                5KY4ggFZ8j6zyZk1a60ZeD3sfbq9/fnh5dR/GJ8e1zv/4cn/8enhyd/748vzD/PT07vbuffD3csv\
+                L6fx9WfePDwu/+XUZNQc11x3dyvtNLV4P8UQSs5vbm9vv+Vtb25ubr7pjT/+eLoVse9TPd28fm8n\
+                fjXf9qdnf7l9/PD0vr97+Jc/3d/Lnd6F09/fnI6v29u3/fnt/fPbnrT8dfsUTcOazDVjlTmbm4dR\
+                Zgx72dhbqk/No+c8ZxZtbbShZduWNZJfiLrXsj41ZglxhV5s20wy2k4jS/TdQusyZa0yxQpf9Xhq\
+                awthtuxfYv7l9M+Hfjoy4M8vz29uf7v+/X24i4Ur/e308P7ju9fs9JeHD48/Pfb3frq/P303P35+\
+                efvh8TvOd/vf5wtlxMk1re+6OVqeOj2HSrVqm1Nrcm7e+to7dzHeubtuXa5LR8tyIWrTPaV4brWa\
+                lC1RU1xle+g97pRJWE+paBm5xrpn2kOGdc3m1tvo56PGmnIsO9iy2CWnlINq3r2kmZJri42SWOUH\
+                HbxOtidbbddgOQUSfCGq79XatrWLS5pjOn/XFXuIUiIQ7ln3rhp8bW4Va9ZZhy+qWfZoej4qt5tB\
+                6tyz6hoaW6DG2Wc0MTLLPYvGI/K0lvuSmovwR0Yc5DXtC1En6Ew7z60S6s5hBNNYltrUnVszTVJt\
+                xNRziZFbj1KUkE1r773a+ajS46zdcmlZZQVADfayzSr8IlqbeS2JU5K1UKxF15xa6lzfZ6jhQrUA\
+                dXSLY5fa2wyp8/FO9nzyk3fCh+kkP29KpcFkd5eYsg/pVks9H7XEVEOKksI2LtzIaIq0aI020pS+\
+                5ghbJK8USOuKc+5YPeU6tvme40JU+ppcJW3WRok8vKNI89Zq0DpDB8O0+Cb7ImUIpy5NqWj3snyu\
+                81FNXWurQ0Ipo+Re6u7RhyVVsuEBdJY4G0dNoai5J5rGDZwMaWuE81EbqNSV807iys35nVGv5FaX\
+                51EhMAhLWteS6JhKqj119TlDHmtdqFarm17NtfuBfZK4VLhtLh0a73MZyCy8JQ4fudHKnUosgQ9a\
+                KtkuVGuEMHIiTdSsOglO0WUUGXMVWaXGqGEGm+71CB/CipSpgy6TWC/11sGWIt53KrYChd99gtq8\
+                oQXA1HLIEJSrxgrCaoe4Qy7JU+Owu1+oFo/uCjMfBFhopBbB6I7cLeZWzHQB0JZaLbR10qBQuBbd\
+                pdNcFvKlqBV9CHEI/WgWaaPuY1bwZE7n1jVz5c5ET5Ym6e1GnkulaNX9Ag8swBcA3qQgdBRfiArU\
+                inbY8kTv1zwy1Y+hNe19rLCO21eL1oPO81E9pc5H0qocOFRvZoheo4C2ixjUQmjIfxcNAnZn5L0R\
+                oQBa5O1Cb7kmraU3Lgq23HT3Lm04GA2iwCqgt5ZjGH0lK+AL4g1VeX0eI1/Iq6/FObzuCKbUNg0v\
+                GkcY6rl6gdGgKus0Vl7dIjw26EPfitBFFObNzX9qqHybht6cUTuKilY0lLSGIshpRowUzxPqbNTJ\
+                eqZOvZfiDtlyCIXrgH3OwK1fiFr14M9QQuWOsGcsA1SLWq1jLPO2cseZ5FSRvTRmb7BgMkN8EXO/\
+                EBXtshAbzqwe1GChw2ONcJDqQXsllIMuZxQtZNC8aLIdFlLWis8LUXeE5jlYkT2oLg0XPS/lXMC6\
+                lBVblaFwXaOLYoThfO5VEB1sltj5qJFTqUrOCU2G6KGHDUHMnrsb2Ol4s9ByVkskchdousKFo/aJ\
+                q9B1PmoKHYUc2XCKcW5YJB5UU4NkAE/pbMJuiNUeC37Kgg8MfSia3xzYnY8qjVYr3oKgb3Xg6sCb\
+                qgf6aNKc3JlajtKTlILAkbCIGVJKmEylno+qPY1ea6Bgu7n2BuAFjk5pOe7Ke551Se5YCUdHOwLi\
+                DTtkcGzCa5+PSonhcdlaIp4DasQbpeEifWy0H4TUCmMHKw2mHxwdNVnZqEVMM1/Aa6FIWfYhtVIE\
+                Am4DOhW8pS9OlINAUAq6NCo8lIEHyAr4ywZrmZ6PCuvglJpmDFSu9AHGTIVSY6pKLVAlXXWYUwzl\
+                JCvQNi0AfPFD4mucj4qqI4ignud4gWUbnnCfgtcJASmWUjP5qZodqsVPISITkEjlPetCXmuaEHcF\
+                R7M6kFJKU/DQc3I9fEXFh/rCUxvVstHpZOmgRjFH2N50ISpXT9Cikta5DS8H8yFR0hHmA8qgn9cJ\
+                44RllMsiJIsLnGDHqeb5qJhBJXMRz9F6y/BxwuxlsDYGr1ARRoJcj4Eg1BobEZE+fOeMqLhfOOvI\
+                GhDYaqX3A7GLEuyBryYUMnGYEYwD/8jxs8M2Bsx6PQwnw0C90FsLv4P16KI7LVOog2GKYI3solgi\
+                G3rFZxsmBdtkDeFPR95B2uF/L0TVjugA2HHMJHOXiJnEOkENsBXeTOASeKVDwQMdSalGOHtiMmjE\
+                eQGvmAgmpJmH0tgTkFleiPFirptKXyXGERhwNVJvgLgXjzRWRat2jh7PR4VEmaiQr+SH2GI6j8YB\
+                uoWP0QRh68CrBAQFVyVgGS+L/0WKBAu6L0Q9rBjqiOmN6AcFjtizvDZh2uFSY3bUJR4CwAhTMJZ7\
+                wo8BWOwvynwuKo6HsYNZCr0/bFxkqG0Vu0uEDS3VNVaXhFM9VG3x5hJJKKosoj7+OPF+frld7z6+\
+                OT2sx34M77Gen7JtN+R2uB0TT33tbtkVKxTpYjy17sX4MxA6UFOVJjf6o9S2nPbqB5rX1xYh7x4e\
+                P/3yP5Ygv/37rwuQ7fiNBE3d3aV1jKqtjK8vQH6Pcnn58fszr4uPWr4sPo7vXxYfT58/vnz4+al/\
+                fPv5/l7DXbi48yAbr0uItpYxLZXWRyjr4BaJoLM5agld9VkYUaGhgvPA78LrufH0haiLUTwNw2hM\
+                ZZwxJJaxDo2SQxCZ9touG6M2ks3DeJApSrVnYWgrWf+IgGefT/7y/PLhqf/s18XHdfFxXXxcFx/X\
+                xcd18XFdfFwXH9fFx3XxcV18XBcf18XHdfFxXXz8WYuP931+eH6dvH/6yv8DOfPkr8sQx/9hx0e5\
+                uwN4fR4jzNeXIefiXV6LnHv6WJDwmu9TOd28frfXBcmr+Ul38S5+m/c5t+RgWE1QO55ElgTGUgA0\
+                4LvIe2qczAoJ5SyAqWEgA4oorTG5o/q0QL4Qda5jPRBwT3XZsNVhnYHPR4cZl/FDhpasWLJ0WKkw\
+                PSANs2TsPR/Mf8TQbz7vuja5rk2ua5Pr2uS6NrmuTa5rk+va5Lo2ua5NrmuT69rkuja5rk3+L9cm\
+                /wZq2fi41TIAAA==',
+              ],
+              'archive': [
+                // add ie_key to archive msg
+                'H4sIAAAAAAAAA6WSb0tCMRTG399Pcd7tXu4fNUwvgmBgUVARGUFEjHl3psPrJttMRfzuzatGmb2p\
+                82Jjz8757eGccSkEpOlIOmC1laO8nNVe9NzNh9i/zWYrGJ5SA6k4LqGNvN4YiryZZXmjqOfts5xD\
+                o15vNZtBmqaniUEcx79Qez1IG+d5K2lDvN+9xFEALp1hhaNSCR1aLEUCc1MmwPVClZrx7pOZYwIS\
+                6QRX3Xut/KGqqSp2QgABfA2H0xmVHLq+LBuho3sh9OToe6oUn9nSgtIOtkRgisPWTCYVPTihzBRj\
+                +Y7hmkhOOoe6BMjOnJf8uok6QQpHUaGcprYwiCoU5PUAfYN1dUmFNlPmDhmf7Opy4FYl2uymH206\
+                QIL433jvMyv1Ak0YfX/i8u7h+mJwM4g2f/B1bOs4yJhZYKVBxv3v8zgwWGjD0fdegRv7tu86TKKf\
+                LD+o6s0ZM2xqt1MNydCjJlQriktpnVQjksAVKy36GZx0YJi0CJf77GfJUT8iK8bIgw9pUhOGLwMA\
+                AA==',
+              ],
+            };
+            const fix_pr_patches = {
+            };
+            const patches = [];
+
+            for (const pr of prs) {
+              let pr_number = parseInt(pr);
+              if (isNaN(pr_number)) {
+                console.warn(`'${pr}' is not a number.`);
+                continue;
+              }
+
+              try {
+                const res = await waitingMergeability({
+                  owner: "yt-dlp",
+                  repo: "yt-dlp",
+                  pull_number: pr_number,
+                });
+                if( res === undefined || res.data.merged || !res.data.mergeable ) {
+                  // console.warn(`Pr#${pr_number} can't merged because it has been merged or has conflicts with the base branch.`);
+                  if(!res || res.data.mergeable === null) {
+                    console.warn(`Cannot get Pr#${pr_number} mergeability.`);
+                  } else {
+                    res.data.merged ? console.warn(`Pr#${pr_number} has been merged.`) : console.warn(`Pr#${pr_number} has conflicts with the base branch.`);
+                  }
+                  continue;
+                }
+                const {status, data:content} = await github.request(res.data.diff_url);
+                const name = res.data.title.replace(/[/\\?%*:|`'"<> ]/g, '-').replace(/--+/g, '-');
+                await fs.writeFile(`patch-${String(i).padStart(4,'0')}-#${pr_number}-${name}.patch`, content)
+                  .then(()=>{i++; patch_note+=`- [#${pr_number}](${res.data.html_url}): ${res.data.title}\n`;})
+                  .catch(err => console.log(err));
+                console.log(`Download patch of #${pr_number}: ${res.data.title}.`)
+                if (fix_pr_patches[pr_number]) {
+                  fix_pr_patches[pr_number]
+                  .map((e,idx)=>patches.push([`patch-${String(i-1).padStart(4,'0')}-#${pr_number}-${String(idx+1).padStart(4,'0')}-${name}.patch`, b64gzip(e, 1)]));
+                  delete fix_pr_patches[pr_number];
+                  delete patches_to_apply[pr_number];
+                }
+              } catch(error) {
+                if (error?.response) {
+                  console.warn(`Get pr#${pr_number} failed: ${error.response.data.message}.`);
+                } else {
+                  console.warn(error);
+                }
+                continue;
+              };
+            }
+            Object.entries(patches_to_apply).forEach(([key, value], index) => {
+              if (key.startsWith('!')) return;
+              value.map((e,i)=>patches.push([`patch-${String(index+1).padStart(4,'0')}-${String(i+1).padStart(4,'0')}-${key}.patch`,b64gzip(e, 1)]));
+            });
+            /*for (let p in patches_to_apply) {
+              patches_to_apply[p].map((e,i)=>patches.push([`patch-${String(i+1).padStart(4,'0')}-${p}.patch`,b64gzip(e, 1)]));
+            }*/
+            await Promise.all(patches.map(e=>fs.writeFile(e[0],e[1])));
+            await core.summary.clear();
+            patch_note = patch_note.trim();
+            if (patch_note) {
+              core.summary.addHeading('Merged Prs');
+              core.summary.addList(patch_note.replace(/- \[(?<pr>#\d+)\]\((?<url>.*?)\)/g,'<a href="$<url>">$<pr></a>').replace(/`(?<code>[^`]+)`/g, '<code>$<code></code>').split('\n'));
+              await core.summary.write();
+            }
+            if (!patch_note.length) patch_note = Object.keys(patches_to_apply).join('\n')
+            core.setOutput("patch_note", patch_note);
+      - name: Upload patches
+        uses: actions/upload-artifact@v4
+        if: ${{ steps.process_prs.outputs.patch_note }}
+        with:
+          name: patchsets
+          path: "patch-*.patch"
+  build:
+    needs: [process]
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.process.outputs.version }}
+      channel: ${{ inputs.channel }}
+      origin: ${{ inputs.origin }}
+      unix: ${{ inputs.unix }}
+      linux: ${{ inputs.linux }}
+      linux_armv7l: ${{ inputs.linux_armv7l }}
+      musllinux: ${{ inputs.musllinux }}
+      macos: ${{ inputs.macos }}
+      windows: ${{ inputs.windows }}
+      patch_note: ${{ needs.process.outputs.patch_note }}
+    permissions:
+      contents: read
+      packages: write # For package cache
+      actions: write
+    secrets: inherit
