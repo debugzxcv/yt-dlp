@@ -30,6 +30,9 @@ on:
       windows:
         default: true
         type: boolean
+      patch_note:
+        required: false
+        type: string
     secrets:
       GPG_SIGNING_KEY:
         required: false
@@ -420,14 +423,14 @@ jobs:
         include:
         - arch: 'x64'
           runner: windows-2025
-          python_version: '3.10'
+          python_version: '3.13'
           platform_tag: win_amd64
           pyi_version: '6.17.0'
           pyi_tag: '2025.11.29.054325'
           pyi_hash: e28cc13e4ad0cc74330d832202806d0c1976e9165da6047309348ca663c0ed3d
         - arch: 'x86'
           runner: windows-2025
-          python_version: '3.10'
+          python_version: '3.13'
           platform_tag: win32
           pyi_version: '6.17.0'
           pyi_tag: '2025.11.29.054325'
