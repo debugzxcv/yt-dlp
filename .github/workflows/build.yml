@@ -30,6 +30,9 @@ on:
       windows:
         default: true
         type: boolean
+      patch_note:
+        required: false
+        type: string
     secrets:
       GPG_SIGNING_KEY:
         required: false
@@ -429,14 +432,14 @@ jobs:
         include:
         - arch: 'x64'
           runner: windows-2025
-          python_version: '3.10'
+          python_version: '3.13'
           platform_tag: win_amd64
           pyi_version: '6.17.0'
           pyi_tag: '2025.11.29.054325'
           pyi_hash: e28cc13e4ad0cc74330d832202806d0c1976e9165da6047309348ca663c0ed3d
         - arch: 'x86'
           runner: windows-2025
-          python_version: '3.10'
+          python_version: '3.13'
           platform_tag: win32
           pyi_version: '6.17.0'
           pyi_tag: '2025.11.29.054325'
@@ -462,6 +465,29 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Download patches
+        if: ${{ inputs.patch_note != '' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: patchsets
+          path: patchsets
+      - name: Apply patches
+        if: ${{ inputs.patch_note != '' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          git config --global user.email "you@example.com"
+          git config --global user.name "Your Name"
+          Get-ChildItem patchsets -Filter "*.patch" | Foreach-Object {
+            $filepath=$_.FullName
+            echo $filepath
+            git apply --stat --apply $filepath
+            <#if ($? -ne 0) {
+              git am --abort
+            }#>
+          }
 
       - uses: actions/setup-python@v6
         with:
